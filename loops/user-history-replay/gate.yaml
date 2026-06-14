@@ -1,0 +1,26 @@
+release_gate_id: gate_user_history_replay
+objective_id: obj_user_history_replay
+version: 0.1
+
+block_if:
+  - capsule_subject_missing = true
+  - materialization_failed = true
+  - private_frontend_failed = true
+  - real_external_publish_attempted = true
+  - safe_export_contains_credentials = true
+
+warn_if:
+  - graph_related_users = 0
+  - safe_redaction_removed_relevant_channel_context = true
+  - public_read_models_need_backfill = true
+
+human_review_if:
+  - raw_export_requested = true
+  - replay_contains_customer_sensitive_content = true
+  - judge_disagreement = true
+
+ship_to_staging_if:
+  - capsule_integrity = pass
+  - materialization_integrity = pass
+  - no_external_side_effects = pass
+  - required_browser_trace = pass

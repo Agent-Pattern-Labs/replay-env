@@ -1,0 +1,108 @@
+loop_id: loop_user_history_replay
+version: 0.1
+status: running
+
+objective_id: obj_user_history_replay
+current_iteration: 1
+
+system:
+  name: Replay Env
+  scope: >
+    Generic production-history replay capsules plus app manifests for
+    subject-scoped backend/frontend replay.
+  out_of_scope:
+    - Automatic browser replay from production session recordings.
+    - Live third-party provider publishing.
+    - Production data export without explicit operator-supplied credentials.
+
+objective:
+  desired_outcome: >
+    A production user's app history can be replayed locally through the normal
+    backend and frontend before a fix moves to staging.
+  hard_constraints:
+    - Do not commit capsules.
+    - Do not include production credentials in safe exports.
+    - Do not publish externally during replay.
+  quality_bars:
+    - App manifest exports subject and related graph rows.
+    - Materializer loads the capsule into local Postgres.
+    - Local subject rewrite lets fixed-dev-auth frontends open the replay.
+  preference_direction:
+    prefer:
+      - Shared replay-capsule shape with app manifests.
+      - Manifest-defined graph expansion and table materialization.
+    avoid:
+      - Relying only on the single-file fallback for multi-user replay.
+
+world:
+  assumptions:
+    - The initial supported persistence target is Postgres.
+    - The local replay target can run the app with a replay database.
+    - Operator supplies a production DB URL explicitly when exporting.
+  profiles:
+    - subject_user
+    - peer_user
+    - hosted_agent
+    - mobile_channel
+    - distribution_provider_mock
+  known_gaps:
+    - Browser session event replay is not captured yet.
+    - The materializer requires the target schema to exist before import.
+
+probes:
+  current:
+    probe_id: sc_subject_graph_materializes
+    purpose: >
+      Prove one subject user's production-derived graph can be exported and
+      loaded into local app Postgres.
+  backlog:
+    - Add browser probe that opens dashboard, timeline, chats, and public profile.
+    - Add API probe that snapshots key JSON responses before/after a fix.
+    - Add session replay importer for frontend click/action timelines.
+
+trace:
+  latest_trace_id: none
+  evidence_required:
+    - capsule path and hash
+    - table row counts
+    - graph users and reasons
+    - materialization command status
+    - API health and private session response
+    - frontend screenshots and console errors
+  evidence_gaps:
+    - No browser trace runner yet.
+
+judge:
+  required_checks:
+    - capsule_has_subject
+    - materialization_passed
+    - no_credentials_in_safe_export
+    - no_external_publish_side_effect
+  rubrics:
+    - replay_fidelity
+    - cross_user_context
+  human_review_if:
+    - raw export is used
+    - safe redaction removes evidence needed to diagnose the bug
+
+repair:
+  last_failed_layer: none
+  current_repair: >
+    Initial generic replay repo with manifest-driven Postgres export and
+    materialization.
+
+memory:
+  new_lessons:
+    - Apps with fixed local identities need a generic subject rewrite option.
+    - Multi-subject replay should materialize a real local database, not only a flat fixture file.
+  regressions_added: []
+  golden_examples_added: []
+
+gate:
+  decision: continue
+  reason: >
+    The first manifest-driven exporter can export and materialize capsules, but browser trace
+    probes still need to be added before this is a complete promotion gate.
+  next_loop: >
+    Export a real scoped subject from an app manifest, materialize it locally,
+    then add the first browser/API trace probe from that capsule.

@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.tmp/
+__pycache__/
+*.pyc
+capsules/**/*.json
+capsules/**/*.log
+capsules/**/*.env
+!capsules/.gitkeep

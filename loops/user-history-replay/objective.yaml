@@ -1,0 +1,57 @@
+objective_id: obj_user_history_replay
+name: User History Replay
+owner: Agent Pattern Labs
+version: 0.1
+
+mission:
+  description: >
+    Replay a production user's real application history across backend and
+    frontend before promoting a fix to staging.
+
+success_outcome:
+  primary: >
+    A scoped production-derived capsule can be materialized locally and opened
+    through the app's normal frontend/backend paths without data loss, unsafe
+    external side effects, or broken cross-user context.
+  secondary:
+    - Related users touched by the subject remain present as distinct users.
+    - Production credentials and external channel secrets are not needed for local replay.
+    - The replay produces trace evidence that can become a regression.
+
+hard_constraints:
+  - Never export production data without an explicit tenant/user scope.
+  - Never commit replay capsules or raw production-derived traces.
+  - Never publish to real external providers during replay.
+  - Never require production credentials to view a local replay.
+
+quality_bars:
+  - metric: capsule_subject_present
+    threshold: pass when the subject profile row exists in the capsule.
+  - metric: materialized_private_frontend
+    threshold: pass when dashboard, profile, timeline, and chats load for the subject.
+  - metric: replay_trace_completeness
+    threshold: pass when API responses, browser screenshots, console errors, and gate decision are captured.
+
+preference_direction:
+  prefer:
+    - App manifests that emit a shared capsule shape.
+    - Local/staging materializers that use the app's normal persistence layer.
+    - Safe redaction by default.
+  avoid:
+    - One-off database dumps with no graph definition.
+    - Replay paths that bypass the real backend and frontend.
+    - Synthetic fixtures when production history is available and scoped.
+
+release_policy:
+  block_if:
+    - subject profile is missing
+    - materialization fails
+    - private frontend cannot load the subject
+    - replay attempts a real external publish
+    - required trace evidence is incomplete
+  warn_if:
+    - safe redaction may hide a suspected provider/channel bug
+    - cross-user graph expansion is partial
+  human_review_if:
+    - raw capsule export is requested
+    - replay contains sensitive customer content

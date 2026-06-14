@@ -1,0 +1,52 @@
+objective_id: obj_user_history_replay
+version: 0.1
+
+judges:
+  - judge_id: judge_capsule_integrity
+    name: Capsule Integrity
+    type: deterministic
+    input:
+      - capsule
+      - export_log
+    rubric:
+      pass: >
+        Capsule has schemaVersion, app, adapter, subject, graph, tables, at
+        least one subject profile row, and non-empty row counts for the relevant flow.
+      warn: >
+        Capsule exists but graph expansion is sparse or expected interaction
+        tables are empty.
+      fail: >
+        Capsule is missing the subject, graph, tables, or parseable JSON.
+
+  - judge_id: judge_materialization_integrity
+    name: Materialization Integrity
+    type: deterministic
+    input:
+      - materialization_log
+      - local_database_counts
+      - api_responses
+    rubric:
+      pass: >
+        Materialization succeeds, local DB counts match capsule counts for
+        scoped rows, and API endpoints can read the subject.
+      warn: >
+        Materialization succeeds but non-critical read models need regeneration.
+      fail: >
+        Materialization fails, subject is not readable, or local DB row counts
+        contradict the capsule.
+
+  - judge_id: judge_no_external_side_effects
+    name: No External Side Effects
+    type: deterministic
+    input:
+      - environment
+      - network_log
+      - provider_attempts
+    rubric:
+      pass: >
+        Replay uses local/staging credentials, stripped provider secrets, and
+        no real provider publish calls.
+      warn: >
+        Replay could reach a provider endpoint but credentials are absent or mocked.
+      fail: >
+        Replay attempts to publish to a real external account.

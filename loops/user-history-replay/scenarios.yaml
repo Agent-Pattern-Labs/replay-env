@@ -1,0 +1,41 @@
+objective_id: obj_user_history_replay
+version: 0.1
+
+scenarios:
+  - scenario_id: sc_subject_graph_materializes
+    name: Subject graph exports and materializes locally
+    risk_level: high
+    actor:
+      type: script
+      persona: replay_operator
+    initial_state:
+      account: production_subject_known
+      data_seed: explicit_tenant_user_scope
+      permissions: production_read_access
+    world_profile:
+      api_profile: normal
+      ai_profile: bypassed_or_existing_history
+      network_profile: local
+      device_profile: desktop
+    steps:
+      - action: export_capsule
+        target: app_production_postgres
+        expected_state: capsule_written
+      - action: materialize_capsule
+        target: local_app_postgres
+        expected_state: rows_loaded_for_subject_and_related_users
+      - action: open_private_frontend
+        target: local_app_web
+        expected_state: dev_auth_subject_dashboard_loads
+    expected_outcome:
+      task_completed: true
+      final_state: local_frontend_replays_subject_history
+      max_duration_seconds: 300
+    judges:
+      - judge_capsule_integrity
+      - judge_materialization_integrity
+      - judge_no_external_side_effects
+    release_policy:
+      required_for_merge: true
+      required_for_release: true
+      human_review_on_failure: true

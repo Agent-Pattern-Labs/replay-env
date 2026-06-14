@@ -1,0 +1,251 @@
+{
+  "appId": "profilescribe",
+  "adapter": "postgres-subject-graph.v1",
+  "repoPath": "/Users/charlie/AgentPatternLabs/profile-scribe",
+  "subjectKeys": ["tenant_id", "user_id"],
+  "localSubject": {
+    "tenant_id": "local-dev-tenant",
+    "user_id": "local-dev-user"
+  },
+  "localDatabaseUrl": "postgres://profilescribe:profilescribe@localhost:5432/profilescribe?sslmode=disable",
+  "api": {
+    "port": 8080,
+    "healthUrl": "http://localhost:8080/api/health"
+  },
+  "web": {
+    "port": 5173,
+    "url": "http://localhost:5173"
+  },
+  "postgres": {
+    "prodDatabaseUrlEnv": "PROFILESCRIBE_PROD_DATABASE_URL",
+    "replayDatabaseUrlEnv": "PROFILESCRIBE_REPLAY_DATABASE_URL",
+    "graphEdges": [
+      "select p.target_tenant_id as tenant_id, p.target_user_id as user_id, 'peer_target'::text as reason from peer_link_requests p, params seed where p.tenant_id = seed.tenant_id and p.user_id = seed.user_id",
+      "select p.tenant_id, p.user_id, 'peer_requester'::text as reason from peer_link_requests p, params seed where p.target_tenant_id = seed.tenant_id and p.target_user_id = seed.user_id",
+      "select m.sender_tenant_id as tenant_id, m.sender_user_id as user_id, 'chat_sender'::text as reason from profile_chat_messages m, params seed where m.created_at >= seed.since_at and ((m.tenant_id = seed.tenant_id and m.user_id = seed.user_id) or (m.sender_tenant_id = seed.tenant_id and m.sender_user_id = seed.user_id) or (m.recipient_tenant_id = seed.tenant_id and m.recipient_user_id = seed.user_id)) and m.sender_user_id <> '' and left(m.sender_user_id, 2) <> '__'",
+      "select m.recipient_tenant_id as tenant_id, m.recipient_user_id as user_id, 'chat_recipient'::text as reason from profile_chat_messages m, params seed where m.created_at >= seed.since_at and ((m.tenant_id = seed.tenant_id and m.user_id = seed.user_id) or (m.sender_tenant_id = seed.tenant_id and m.sender_user_id = seed.user_id) or (m.recipient_tenant_id = seed.tenant_id and m.recipient_user_id = seed.user_id)) and m.recipient_user_id <> '' and left(m.recipient_user_id, 2) <> '__'",
+      "select r.actor_tenant_id as tenant_id, r.actor_user_id as user_id, 'reaction_actor'::text as reason from timeline_reactions r, params seed where r.updated_at >= seed.since_at and r.tenant_id = seed.tenant_id and r.user_id = seed.user_id and r.actor_user_id <> ''",
+      "select r.tenant_id, r.user_id, 'reaction_owner'::text as reason from timeline_reactions r, params seed where r.updated_at >= seed.since_at and r.actor_tenant_id = seed.tenant_id and r.actor_user_id = seed.user_id",
+      "select c.actor_tenant_id as tenant_id, c.actor_user_id as user_id, 'comment_actor'::text as reason from timeline_comments c, params seed where c.created_at >= seed.since_at and c.tenant_id = seed.tenant_id and c.user_id = seed.user_id and c.actor_user_id <> ''",
+      "select c.tenant_id, c.user_id, 'comment_owner'::text as reason from timeline_comments c, params seed where c.created_at >= seed.since_at and c.actor_tenant_id = seed.tenant_id and c.actor_user_id = seed.user_id"
+    ],
+    "tableOrder": [
+      "profiles",
+      "profile_sources",
+      "agent_activities",
+      "post_drafts",
+      "network_posts",
+      "peer_link_requests",
+      "profile_chat_messages",
+      "timeline_reactions",
+      "timeline_comments",
+      "profile_agent_run_receipts",
+      "profile_source_observations",
+      "profile_fact_candidates",
+      "provider_connections",
+      "distribution_publish_attempts",
+      "user_ai_settings",
+      "actionproof_consumptions",
+      "mobile_channel_links",
+      "background_jobs",
+      "public_profiles_index",
+      "public_timeline_posts"
+    ],
+    "tables": [
+      {
+        "name": "profiles",
+        "alias": "p",
+        "from": "profiles p join graph_keys g on g.tenant_id = p.tenant_id and g.user_id = p.user_id",
+        "orderBy": "p.tenant_id, p.user_id",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "profile_sources",
+        "alias": "s",
+        "from": "profile_sources s join graph_keys g on g.tenant_id = s.tenant_id and g.user_id = s.user_id",
+        "orderBy": "s.tenant_id, s.user_id, s.id",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "agent_activities",
+        "alias": "a",
+        "from": "agent_activities a join graph_keys g on g.tenant_id = a.tenant_id and g.user_id = a.user_id",
+        "where": "a.created_at >= (select since_at from params)",
+        "orderBy": "a.created_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "post_drafts",
+        "alias": "d",
+        "from": "post_drafts d join graph_keys g on g.tenant_id = d.tenant_id and g.user_id = d.user_id",
+        "where": "d.updated_at >= (select since_at from params) or d.status in ('approved', 'published', 'scheduled')",
+        "orderBy": "d.updated_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "network_posts",
+        "alias": "n",
+        "from": "network_posts n join graph_keys g on g.tenant_id = n.tenant_id and g.user_id = n.user_id",
+        "where": "n.published_at >= (select since_at from params)",
+        "orderBy": "n.published_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "peer_link_requests",
+        "alias": "p",
+        "from": "peer_link_requests p",
+        "where": "exists (select 1 from graph_keys g where g.tenant_id = p.tenant_id and g.user_id = p.user_id) or exists (select 1 from graph_keys g where g.tenant_id = p.target_tenant_id and g.user_id = p.target_user_id)",
+        "orderBy": "p.updated_at",
+        "deletePredicate": "(t.tenant_id = g.tenant_id and t.user_id = g.user_id) or (t.target_tenant_id = g.tenant_id and t.target_user_id = g.user_id)"
+      },
+      {
+        "name": "profile_chat_messages",
+        "alias": "m",
+        "from": "profile_chat_messages m",
+        "where": "m.created_at >= (select since_at from params) and (exists (select 1 from graph_keys g where g.tenant_id = m.tenant_id and g.user_id = m.user_id) or exists (select 1 from graph_keys g where g.tenant_id = m.sender_tenant_id and g.user_id = m.sender_user_id) or exists (select 1 from graph_keys g where g.tenant_id = m.recipient_tenant_id and g.user_id = m.recipient_user_id))",
+        "orderBy": "m.created_at",
+        "deletePredicate": "(t.tenant_id = g.tenant_id and t.user_id = g.user_id) or (t.sender_tenant_id = g.tenant_id and t.sender_user_id = g.user_id) or (t.recipient_tenant_id = g.tenant_id and t.recipient_user_id = g.user_id)"
+      },
+      {
+        "name": "timeline_reactions",
+        "alias": "r",
+        "from": "timeline_reactions r",
+        "where": "r.updated_at >= (select since_at from params) and (exists (select 1 from graph_keys g where g.tenant_id = r.tenant_id and g.user_id = r.user_id) or exists (select 1 from graph_keys g where g.tenant_id = r.actor_tenant_id and g.user_id = r.actor_user_id))",
+        "orderBy": "r.updated_at",
+        "deletePredicate": "(t.tenant_id = g.tenant_id and t.user_id = g.user_id) or (t.actor_tenant_id = g.tenant_id and t.actor_user_id = g.user_id)"
+      },
+      {
+        "name": "timeline_comments",
+        "alias": "c",
+        "from": "timeline_comments c",
+        "where": "c.created_at >= (select since_at from params) and (exists (select 1 from graph_keys g where g.tenant_id = c.tenant_id and g.user_id = c.user_id) or exists (select 1 from graph_keys g where g.tenant_id = c.actor_tenant_id and g.user_id = c.actor_user_id))",
+        "orderBy": "c.created_at",
+        "deletePredicate": "(t.tenant_id = g.tenant_id and t.user_id = g.user_id) or (t.actor_tenant_id = g.tenant_id and t.actor_user_id = g.user_id)"
+      },
+      {
+        "name": "profile_agent_run_receipts",
+        "alias": "r",
+        "from": "profile_agent_run_receipts r join graph_keys g on g.tenant_id = r.tenant_id and g.user_id = r.user_id",
+        "where": "r.created_at >= (select since_at from params)",
+        "orderBy": "r.created_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "profile_source_observations",
+        "alias": "o",
+        "from": "profile_source_observations o join graph_keys g on g.tenant_id = o.tenant_id and g.user_id = o.user_id",
+        "where": "o.created_at >= (select since_at from params)",
+        "orderBy": "o.created_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "profile_fact_candidates",
+        "alias": "f",
+        "from": "profile_fact_candidates f join graph_keys g on g.tenant_id = f.tenant_id and g.user_id = f.user_id",
+        "where": "f.updated_at >= (select since_at from params)",
+        "orderBy": "f.updated_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "provider_connections",
+        "alias": "pc",
+        "from": "provider_connections pc join graph_keys g on g.tenant_id = pc.tenant_id and g.user_id = pc.user_id",
+        "orderBy": "pc.tenant_id, pc.user_id, pc.provider, pc.id",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "distribution_publish_attempts",
+        "alias": "a",
+        "from": "distribution_publish_attempts a join graph_keys g on g.tenant_id = a.tenant_id and g.user_id = a.user_id",
+        "where": "a.updated_at >= (select since_at from params)",
+        "orderBy": "a.updated_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "user_ai_settings",
+        "alias": "s",
+        "from": "user_ai_settings s join graph_keys g on g.tenant_id = s.tenant_id and g.user_id = s.user_id",
+        "orderBy": "s.tenant_id, s.user_id",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "actionproof_consumptions",
+        "alias": "c",
+        "from": "actionproof_consumptions c join graph_keys g on g.tenant_id = c.tenant_id and g.user_id = c.user_id",
+        "where": "c.created_at >= (select since_at from params)",
+        "orderBy": "c.created_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "mobile_channel_links",
+        "alias": "l",
+        "from": "mobile_channel_links l join graph_keys g on g.tenant_id = l.tenant_id and g.user_id = l.user_id",
+        "orderBy": "l.created_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "background_jobs",
+        "alias": "b",
+        "from": "background_jobs b join graph_keys g on g.tenant_id = b.tenant_id and g.user_id = b.user_id",
+        "where": "b.created_at >= (select since_at from params) or b.status in ('queued', 'running', 'retrying')",
+        "orderBy": "b.created_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "public_profiles_index",
+        "alias": "p",
+        "from": "public_profiles_index p join graph_keys g on g.tenant_id = p.tenant_id and g.user_id = p.user_id",
+        "orderBy": "p.tenant_id, p.user_id",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      },
+      {
+        "name": "public_timeline_posts",
+        "alias": "p",
+        "from": "public_timeline_posts p join graph_keys g on g.tenant_id = p.tenant_id and g.user_id = p.user_id",
+        "where": "p.published_at >= (select since_at from params)",
+        "orderBy": "p.published_at",
+        "deletePredicate": "t.tenant_id = g.tenant_id and t.user_id = g.user_id"
+      }
+    ]
+  },
+  "redactionRules": [
+    {
+      "fields": ["secret_ciphertext", "secretCiphertext", "api_key_ciphertext", "apiKeyCiphertext", "key_prefix", "keyPrefix", "key_fingerprint", "keyFingerprint"],
+      "action": "empty"
+    },
+    {
+      "fields": ["external_user_id", "externalUserId"],
+      "action": "hash",
+      "prefix": "replay-user-"
+    },
+    {
+      "fields": ["external_chat_id", "externalChatId"],
+      "action": "hash",
+      "prefix": "replay-chat-"
+    },
+    {
+      "table": "mobile_channel_links",
+      "fields": ["code"],
+      "action": "hash",
+      "prefix": "replay-code-"
+    },
+    {
+      "table": "provider_connections",
+      "fields": ["account_id", "accountId"],
+      "action": "hash",
+      "prefix": "replay-account-"
+    },
+    {
+      "table": "provider_connections",
+      "fields": ["location_id", "locationId"],
+      "action": "hash",
+      "prefix": "replay-location-"
+    },
+    {
+      "table": "provider_connections",
+      "fields": ["metadata"],
+      "action": "empty_object",
+      "recursive": false
+    }
+  ]
+}
