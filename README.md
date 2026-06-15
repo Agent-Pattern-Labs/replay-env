@@ -30,7 +30,7 @@ a golden trace.
 Install directly from GitHub:
 
 ```bash
-cargo install --git https://github.com/Agent-Pattern-Labs/replay-env --tag v0.3.1
+cargo install --git https://github.com/Agent-Pattern-Labs/replay-env --tag v0.3.2
 ```
 
 Or install from a local checkout:

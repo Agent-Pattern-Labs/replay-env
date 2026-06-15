@@ -30,7 +30,9 @@ git push origin vX.Y.Z
 
 The `Release` workflow verifies the crate, builds native binaries for Linux,
 macOS Apple Silicon, and Windows, and creates or updates the GitHub release for
-the tag. Intel macOS users should use `cargo install`.
+the tag. It then builds and attaches an Intel macOS binary from `macos-15-intel`
+as a best-effort post-release artifact so runner capacity cannot block the
+primary release.
 
 ## Crates.io
 
