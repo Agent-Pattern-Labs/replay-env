@@ -30,7 +30,7 @@ a golden trace.
 Install directly from GitHub:
 
 ```bash
-cargo install --git https://github.com/Agent-Pattern-Labs/replay-env --tag v0.2.0
+cargo install --git https://github.com/Agent-Pattern-Labs/replay-env --tag v0.3.0
 ```
 
 Or install from a local checkout:
@@ -72,6 +72,14 @@ See [docs/app-manifest.md](docs/app-manifest.md).
 
 ## Commands
 
+Check a manifest and optional replay database before trusting a replay:
+
+```bash
+replay-env doctor \
+  --app config/apps/<app>.json \
+  --db-url "<local-replay-database-url>"
+```
+
 Export a scoped production subject graph:
 
 ```bash
@@ -81,6 +89,17 @@ replay-env export-postgres \
   --subject user_id=<user-id> \
   --since-days 180 \
   --out "capsules/<app>/<subject>-$(date -u +%Y%m%dT%H%M%SZ).json"
+```
+
+Print generated export SQL without connecting to Postgres:
+
+```bash
+replay-env export-postgres \
+  --app config/apps/<app>.json \
+  --subject tenant_id=<tenant-id> \
+  --subject user_id=<user-id> \
+  --out /tmp/unused.json \
+  --dry-run-sql
 ```
 
 Inspect a capsule:
@@ -95,7 +114,8 @@ Materialize into a local replay database:
 replay-env materialize-postgres \
   --app config/apps/<app>.json \
   --db-url "<local-replay-database-url>" \
-  --capsule "capsules/<app>/<capsule>.json"
+  --capsule "capsules/<app>/<capsule>.json" \
+  --chunk-size 1000
 ```
 
 If the app has a fixed local/dev-auth identity declared in its manifest:
@@ -106,6 +126,34 @@ replay-env materialize-postgres \
   --db-url "<local-replay-database-url>" \
   --capsule "capsules/<app>/<capsule>.json" \
   --use-local-subject
+```
+
+For larger capsules, materialize with chunked COPY scripts instead of JSONB
+recordset inserts:
+
+```bash
+replay-env materialize-postgres \
+  --app config/apps/<app>.json \
+  --db-url "<local-replay-database-url>" \
+  --capsule "capsules/<app>/<capsule>.json" \
+  --load-strategy copy \
+  --chunk-size 5000
+```
+
+Add `--profile` to export, materialize, or run commands to print phase timings.
+Add `--explain` to export/materialize commands to inspect Postgres plans without
+exporting or mutating target tables.
+
+Run the app's manifest-defined replay loop:
+
+```bash
+replay-env run \
+  --app config/apps/<app>.json \
+  --db-url "<local-replay-database-url>" \
+  --capsule "capsules/<app>/<capsule>.json" \
+  --use-local-subject \
+  --trace-out "capsules/<app>/<capsule>-trace.json" \
+  --profile
 ```
 
 Print the app-specific playbook generated from the manifest:
@@ -167,12 +215,18 @@ Rules:
 Codex can call Replay Env directly:
 
 ```bash
+replay-env doctor --app <path-to-app-manifest>.json --db-url "<local-replay-database-url>"
 replay-env playbook --app <path-to-app-manifest>.json
 replay-env inspect <path-to-capsule>.json
 replay-env materialize-postgres \
   --app <path-to-app-manifest>.json \
   --db-url "<local-replay-database-url>" \
   --capsule "<path-to-capsule>.json"
+replay-env run \
+  --app <path-to-app-manifest>.json \
+  --db-url "<local-replay-database-url>" \
+  --capsule "<path-to-capsule>.json" \
+  --trace-out "<path-to-trace>.json"
 ```
 
 If the target app has a fixed local/dev-auth identity, let the agent use the

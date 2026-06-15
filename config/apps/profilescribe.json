@@ -15,6 +15,22 @@
     "port": 5173,
     "url": "http://localhost:5173"
   },
+  "probes": [
+    {
+      "name": "api-health",
+      "kind": "http",
+      "url": "http://localhost:8080/api/health",
+      "expectStatus": 200,
+      "timeoutSeconds": 10
+    },
+    {
+      "name": "web-root",
+      "kind": "http",
+      "url": "http://localhost:5173/",
+      "expectStatus": 200,
+      "timeoutSeconds": 10
+    }
+  ],
   "postgres": {
     "prodDatabaseUrlEnv": "PROFILESCRIBE_PROD_DATABASE_URL",
     "replayDatabaseUrlEnv": "PROFILESCRIBE_REPLAY_DATABASE_URL",
