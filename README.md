@@ -54,6 +54,8 @@ replay-env --help
 Replay Env is implemented in Rust so the installed CLI starts quickly, keeps
 runtime dependencies low, and has a clear path to single-binary distribution.
 
+Release instructions live in [docs/releasing.md](docs/releasing.md).
+
 ## Core Idea
 
 Replay Env does not need one app-specific adapter per repo. Each repo gets an app

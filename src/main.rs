@@ -251,6 +251,47 @@ struct Profile {
     events: Vec<(String, Duration)>,
 }
 
+struct ExportOptions {
+    app_path: PathBuf,
+    subject_args: Vec<String>,
+    db_url_arg: String,
+    out: PathBuf,
+    since_days: u32,
+    redaction: RedactionMode,
+    psql_command: String,
+    dry_run_sql: bool,
+    explain: bool,
+    profile_enabled: bool,
+}
+
+struct MaterializeOptions {
+    app_path: PathBuf,
+    db_url_arg: String,
+    capsule_path: PathBuf,
+    rewrite_subject_args: Vec<String>,
+    use_local_subject: bool,
+    psql_command: String,
+    dry_run_sql: bool,
+    explain: bool,
+    chunk_size: usize,
+    load_strategy: LoadStrategy,
+    profile_enabled: bool,
+}
+
+struct RunOptions {
+    app_path: PathBuf,
+    capsule_path: Option<PathBuf>,
+    db_url: String,
+    rewrite_subject: Vec<String>,
+    use_local_subject: bool,
+    skip_materialize: bool,
+    psql_command: String,
+    chunk_size: usize,
+    load_strategy: LoadStrategy,
+    trace_out: Option<PathBuf>,
+    profile_enabled: bool,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -265,18 +306,18 @@ fn main() -> Result<()> {
             dry_run_sql,
             explain,
             profile,
-        } => export_postgres(
-            &app,
-            subject,
-            db_url,
-            &out,
+        } => export_postgres(ExportOptions {
+            app_path: app,
+            subject_args: subject,
+            db_url_arg: db_url,
+            out,
             since_days,
             redaction,
-            &psql_command,
+            psql_command,
             dry_run_sql,
             explain,
-            profile,
-        ),
+            profile_enabled: profile,
+        }),
         Commands::MaterializePostgres {
             app,
             db_url,
@@ -289,19 +330,19 @@ fn main() -> Result<()> {
             chunk_size,
             load_strategy,
             profile,
-        } => materialize_postgres(
-            &app,
-            db_url,
-            &capsule,
-            rewrite_subject,
+        } => materialize_postgres(MaterializeOptions {
+            app_path: app,
+            db_url_arg: db_url,
+            capsule_path: capsule,
+            rewrite_subject_args: rewrite_subject,
             use_local_subject,
-            &psql_command,
+            psql_command,
             dry_run_sql,
             explain,
             chunk_size,
             load_strategy,
-            profile,
-        ),
+            profile_enabled: profile,
+        }),
         Commands::Doctor {
             app,
             db_url,
@@ -320,19 +361,19 @@ fn main() -> Result<()> {
             load_strategy,
             trace_out,
             profile,
-        } => run_replay(
-            &app,
-            capsule.as_deref(),
+        } => run_replay(RunOptions {
+            app_path: app,
+            capsule_path: capsule,
             db_url,
             rewrite_subject,
             use_local_subject,
             skip_materialize,
-            &psql_command,
+            psql_command,
             chunk_size,
             load_strategy,
-            trace_out.as_deref(),
-            profile,
-        ),
+            trace_out,
+            profile_enabled: profile,
+        }),
         Commands::Inspect { capsule } => {
             let capsule = load_capsule(&capsule)?;
             println!("{}", summary_text(&capsule));
@@ -342,24 +383,13 @@ fn main() -> Result<()> {
     }
 }
 
-fn export_postgres(
-    app_path: &Path,
-    subject_args: Vec<String>,
-    db_url_arg: String,
-    out: &Path,
-    since_days: u32,
-    redaction: RedactionMode,
-    psql_command: &str,
-    dry_run_sql: bool,
-    explain: bool,
-    profile_enabled: bool,
-) -> Result<()> {
-    let mut profile = Profile::new(profile_enabled);
+fn export_postgres(options: ExportOptions) -> Result<()> {
+    let mut profile = Profile::new(options.profile_enabled);
     profile.start("load manifest");
-    let app = load_app_config(app_path)?;
+    let app = load_app_config(&options.app_path)?;
     profile.finish("load manifest");
     profile.start("validate subject");
-    let subject = parse_kv_pairs(subject_args)?;
+    let subject = parse_kv_pairs(options.subject_args)?;
     validate_subject(&app, &subject)?;
     profile.finish("validate subject");
     let env_name = app
@@ -369,20 +399,20 @@ fn export_postgres(
         .unwrap_or("APP_PROD_DATABASE_URL");
 
     profile.start("build export sql");
-    let sql = build_postgres_export_sql(&app, &subject, since_days)?;
+    let sql = build_postgres_export_sql(&app, &subject, options.since_days)?;
     profile.finish("build export sql");
 
-    if dry_run_sql {
+    if options.dry_run_sql {
         print!("{sql}");
         profile.print();
         return Ok(());
     }
 
-    let db_url = db_url_arg.trim().to_string().or_else_env(env_name);
-    require_db_url(&db_url, env_name, psql_command)?;
-    if explain {
+    let db_url = options.db_url_arg.trim().to_string().or_else_env(env_name);
+    require_db_url(&db_url, env_name, &options.psql_command)?;
+    if options.explain {
         profile.start("explain export sql");
-        let stdout = run_psql(&db_url, &explain_sql(&sql), psql_command)?;
+        let stdout = run_psql(&db_url, &explain_sql(&sql), &options.psql_command)?;
         profile.finish("explain export sql");
         print!("{stdout}");
         profile.print();
@@ -390,14 +420,14 @@ fn export_postgres(
     }
 
     profile.start("run export sql");
-    let stdout = run_psql(&db_url, &sql, psql_command)?;
+    let stdout = run_psql(&db_url, &sql, &options.psql_command)?;
     profile.finish("run export sql");
     profile.start("parse export json");
     let mut document: Value =
         serde_json::from_str(stdout.trim()).context("parse psql export JSON output")?;
     profile.finish("parse export json");
 
-    if matches!(redaction, RedactionMode::Safe) {
+    if matches!(options.redaction, RedactionMode::Safe) {
         profile.start("apply redactions");
         apply_redactions(&mut document, &app.redaction_rules);
         profile.finish("apply redactions");
@@ -405,7 +435,7 @@ fn export_postgres(
     object_mut(&mut document, "capsule")?.insert(
         "redaction".to_string(),
         Value::String(
-            match redaction {
+            match options.redaction {
                 RedactionMode::Safe => "safe",
                 RedactionMode::Raw => "raw",
             }
@@ -421,39 +451,31 @@ fn export_postgres(
         }),
     );
 
-    if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+    if let Some(parent) = options
+        .out
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         fs::create_dir_all(parent)
             .with_context(|| format!("create output directory {}", parent.display()))?;
     }
     profile.start("write capsule");
     fs::write(
-        out,
+        &options.out,
         format!("{}\n", serde_json::to_string_pretty(&document)?),
     )
-    .with_context(|| format!("write capsule {}", out.display()))?;
+    .with_context(|| format!("write capsule {}", options.out.display()))?;
     profile.finish("write capsule");
-    println!("wrote {}", out.display());
+    println!("wrote {}", options.out.display());
     println!("{}", summary_text(&document));
     profile.print();
     Ok(())
 }
 
-fn materialize_postgres(
-    app_path: &Path,
-    db_url_arg: String,
-    capsule_path: &Path,
-    rewrite_subject_args: Vec<String>,
-    use_local_subject: bool,
-    psql_command: &str,
-    dry_run_sql: bool,
-    explain: bool,
-    chunk_size: usize,
-    load_strategy: LoadStrategy,
-    profile_enabled: bool,
-) -> Result<()> {
-    let mut profile = Profile::new(profile_enabled);
+fn materialize_postgres(options: MaterializeOptions) -> Result<()> {
+    let mut profile = Profile::new(options.profile_enabled);
     profile.start("load manifest");
-    let app = load_app_config(app_path)?;
+    let app = load_app_config(&options.app_path)?;
     profile.finish("load manifest");
     let env_name = app
         .postgres
@@ -462,13 +484,13 @@ fn materialize_postgres(
         .unwrap_or("APP_REPLAY_DATABASE_URL");
 
     profile.start("load capsule");
-    let mut capsule = load_capsule(capsule_path)?;
+    let mut capsule = load_capsule(&options.capsule_path)?;
     require_capsule_for_app(&capsule, &app)?;
     profile.finish("load capsule");
 
     profile.start("rewrite subject");
-    let mut rewrite_values = parse_kv_pairs(rewrite_subject_args)?;
-    if use_local_subject {
+    let mut rewrite_values = parse_kv_pairs(options.rewrite_subject_args)?;
+    if options.use_local_subject {
         rewrite_values.extend(app.local_subject.clone());
     }
     if !rewrite_values.is_empty() {
@@ -476,40 +498,46 @@ fn materialize_postgres(
     }
     profile.finish("rewrite subject");
 
-    let sql_mode = if explain {
+    let sql_mode = if options.explain {
         MaterializeSqlMode::Explain
     } else {
         MaterializeSqlMode::Execute
     };
     profile.start("build materialize sql");
-    let sql = build_postgres_materialize_sql(&app, &capsule, chunk_size, load_strategy, sql_mode)?;
+    let sql = build_postgres_materialize_sql(
+        &app,
+        &capsule,
+        options.chunk_size,
+        options.load_strategy,
+        sql_mode,
+    )?;
     profile.finish("build materialize sql");
 
-    if dry_run_sql {
+    if options.dry_run_sql {
         print!("{sql}");
         profile.print();
         return Ok(());
     }
 
-    let db_url = db_url_arg.trim().to_string().or_else_env(env_name);
-    require_db_url(&db_url, env_name, psql_command)?;
-    profile.start(if explain {
+    let db_url = options.db_url_arg.trim().to_string().or_else_env(env_name);
+    require_db_url(&db_url, env_name, &options.psql_command)?;
+    profile.start(if options.explain {
         "explain materialize sql"
     } else {
         "run materialize sql"
     });
-    run_psql(&db_url, &sql, psql_command)?;
-    profile.finish(if explain {
+    run_psql(&db_url, &sql, &options.psql_command)?;
+    profile.finish(if options.explain {
         "explain materialize sql"
     } else {
         "run materialize sql"
     });
-    if explain {
-        println!("explained {}", capsule_path.display());
+    if options.explain {
+        println!("explained {}", options.capsule_path.display());
         profile.print();
         return Ok(());
     }
-    println!("materialized {}", capsule_path.display());
+    println!("materialized {}", options.capsule_path.display());
     println!("{}", summary_text(&capsule));
     if !rewrite_values.is_empty() {
         let mut parts: Vec<_> = rewrite_values.iter().collect();
@@ -677,22 +705,10 @@ fn doctor(app_path: &Path, db_url_arg: String, psql_command: &str, strict: bool)
     Ok(())
 }
 
-fn run_replay(
-    app_path: &Path,
-    capsule_path: Option<&Path>,
-    db_url: String,
-    rewrite_subject: Vec<String>,
-    use_local_subject: bool,
-    skip_materialize: bool,
-    psql_command: &str,
-    chunk_size: usize,
-    load_strategy: LoadStrategy,
-    trace_out: Option<&Path>,
-    profile_enabled: bool,
-) -> Result<()> {
-    let mut profile = Profile::new(profile_enabled);
+fn run_replay(options: RunOptions) -> Result<()> {
+    let mut profile = Profile::new(options.profile_enabled);
     profile.start("load manifest");
-    let app = load_app_config(app_path)?;
+    let app = load_app_config(&options.app_path)?;
     profile.finish("load manifest");
     let mut trace = json!({
         "schemaVersion": 1,
@@ -703,22 +719,26 @@ fn run_replay(
     });
     let mut failed = false;
 
-    if let Some(capsule_path) = capsule_path.filter(|_| !skip_materialize) {
+    if let Some(capsule_path) = options
+        .capsule_path
+        .as_deref()
+        .filter(|_| !options.skip_materialize)
+    {
         profile.start("materialize capsule");
         let event = timed_event("materialize", || {
-            materialize_postgres(
-                app_path,
-                db_url.clone(),
-                capsule_path,
-                rewrite_subject.clone(),
-                use_local_subject,
-                psql_command,
-                false,
-                false,
-                chunk_size,
-                load_strategy,
-                false,
-            )
+            materialize_postgres(MaterializeOptions {
+                app_path: options.app_path.clone(),
+                db_url_arg: options.db_url.clone(),
+                capsule_path: capsule_path.to_path_buf(),
+                rewrite_subject_args: options.rewrite_subject.clone(),
+                use_local_subject: options.use_local_subject,
+                psql_command: options.psql_command.clone(),
+                dry_run_sql: false,
+                explain: false,
+                chunk_size: options.chunk_size,
+                load_strategy: options.load_strategy,
+                profile_enabled: false,
+            })
         });
         profile.finish("materialize capsule");
         failed |= !event_success(&event);
@@ -785,7 +805,7 @@ fn run_replay(
         .ok_or_else(|| anyhow!("trace must be an object"))?
         .insert("gate".to_string(), Value::String(gate.to_string()));
 
-    if let Some(trace_out) = trace_out {
+    if let Some(trace_out) = options.trace_out.as_deref() {
         if let Some(parent) = trace_out
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -2069,7 +2089,7 @@ fn run_psql(db_url: &str, sql: &str, psql_command: &str) -> Result<String> {
             }
         );
     }
-    Ok(String::from_utf8(output.stdout).context("decode psql stdout as UTF-8")?)
+    String::from_utf8(output.stdout).context("decode psql stdout as UTF-8")
 }
 
 fn split_command(command: &str) -> Result<Vec<String>> {

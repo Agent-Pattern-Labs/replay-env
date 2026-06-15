@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-release-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-release-${{ runner.os }}-
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Package
+        run: cargo package --locked
+
+      - name: Publish dry run
+        run: cargo publish --dry-run --locked
+
+  binaries:
+    name: Binary ${{ matrix.suffix }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suffix: x86_64-unknown-linux-gnu
+            binary: target/release/replay-env
+            archive: replay-env-x86_64-unknown-linux-gnu.tar.gz
+          - os: macos-13
+            suffix: x86_64-apple-darwin
+            binary: target/release/replay-env
+            archive: replay-env-x86_64-apple-darwin.tar.gz
+          - os: macos-14
+            suffix: aarch64-apple-darwin
+            binary: target/release/replay-env
+            archive: replay-env-aarch64-apple-darwin.tar.gz
+          - os: windows-latest
+            suffix: x86_64-pc-windows-msvc
+            binary: target/release/replay-env.exe
+            archive: replay-env-x86_64-pc-windows-msvc.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-binary-${{ matrix.suffix }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-binary-${{ matrix.suffix }}-
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Stage Unix Archive
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist/replay-env-${{ matrix.suffix }}
+          cp "${{ matrix.binary }}" dist/replay-env-${{ matrix.suffix }}/
+          cp README.md LICENSE dist/replay-env-${{ matrix.suffix }}/
+          tar -C dist -czf dist/${{ matrix.archive }} replay-env-${{ matrix.suffix }}
+
+      - name: Stage Windows Archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/replay-env-${{ matrix.suffix }}
+          Copy-Item "${{ matrix.binary }}" dist/replay-env-${{ matrix.suffix }}/
+          Copy-Item README.md,LICENSE dist/replay-env-${{ matrix.suffix }}/
+          Compress-Archive -Path dist/replay-env-${{ matrix.suffix }} -DestinationPath dist/${{ matrix.archive }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: dist/${{ matrix.archive }}
+
+  github-release:
+    name: GitHub Release
+    needs: binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or Update Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          notes_file="$(mktemp)"
+          {
+            echo "## Install"
+            echo
+            echo '```bash'
+            echo "cargo install --git https://github.com/Agent-Pattern-Labs/replay-env --tag ${TAG_NAME}"
+            echo '```'
+            echo
+            echo "## Artifacts"
+            echo
+            echo "Native release binaries are attached for Linux, macOS, and Windows."
+          } > "$notes_file"
+
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" dist/* --clobber
+            gh release edit "${TAG_NAME}" --notes-file "$notes_file"
+          else
+            gh release create "${TAG_NAME}" dist/* --title "Replay Env ${TAG_NAME}" --notes-file "$notes_file"
+          fi
