@@ -124,9 +124,9 @@ def inspect_capsule(args: argparse.Namespace) -> int:
 
 def print_playbook(args: argparse.Namespace) -> int:
     app = load_app_config(args.app)
-    repo_path = app.get("repoPath", "<repo>")
+    repo_path = app.get("repoPath", "<target-repo-path>")
     local_db = app.get("localDatabaseUrl", "<local-database-url>")
-    app_path = str(Path(repo_path).resolve()) if repo_path != "<repo>" else repo_path
+    app_path = str(Path(repo_path).resolve()) if repo_path != "<target-repo-path>" else repo_path
     subject_args = " ".join(f"--subject {key}=<value>" for key in app["subjectKeys"])
     local_subject = " ".join(f"--rewrite-subject {key}={value}" for key, value in app.get("localSubject", {}).items())
     if app.get("localSubject"):
@@ -136,15 +136,14 @@ def print_playbook(args: argparse.Namespace) -> int:
         f"""Generic replay commands for {app['appId']}:
 
 1. Export a scoped production subject graph:
-   bin/replay-env export-postgres --app {args.app} {subject_args} --out capsules/{app['appId']}/<capsule>.json
+   replay-env export-postgres --app {args.app} {subject_args} --out capsules/{app['appId']}/<capsule>.json
 
 2. Start or migrate the local app database using the app's normal dev flow:
    cd {app_path}
    # use local database: {local_db}
 
 3. Materialize the capsule into the local replay database:
-   cd {Path.cwd()}
-   bin/replay-env materialize-postgres --app {args.app} --db-url "{local_db}" --capsule capsules/{app['appId']}/<capsule>.json {local_subject}
+   replay-env materialize-postgres --app {args.app} --db-url "{local_db}" --capsule capsules/{app['appId']}/<capsule>.json {local_subject}
 
 4. Start the app frontend/backend normally and open its local URL.
 """

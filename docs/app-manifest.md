@@ -36,7 +36,7 @@ single `user_id`.
 The CLI receives subject values generically:
 
 ```bash
-bin/replay-env export-postgres \
+replay-env export-postgres \
   --app config/apps/my-app.json \
   --subject account_id=acct_123 \
   --out capsules/my-app/acct_123.json

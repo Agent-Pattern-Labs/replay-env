@@ -1,7 +1,6 @@
 {
   "appId": "profilescribe",
   "adapter": "postgres-subject-graph.v1",
-  "repoPath": "/Users/charlie/AgentPatternLabs/profile-scribe",
   "subjectKeys": ["tenant_id", "user_id"],
   "localSubject": {
     "tenant_id": "local-dev-tenant",

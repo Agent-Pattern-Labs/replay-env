@@ -25,10 +25,41 @@ patterns.
 Every escaped bug should become a replay. Every excellent outcome should become
 a golden trace.
 
+## Install
+
+Install directly from GitHub:
+
+```bash
+pipx install git+https://github.com/Agent-Pattern-Labs/replay-env.git
+```
+
+Or install from a local checkout:
+
+```bash
+pipx install .
+```
+
+For development from a checkout, this wrapper also works:
+
+```bash
+bin/replay-env --help
+```
+
+Installed usage assumes the `replay-env` command is on `PATH`:
+
+```bash
+replay-env --help
+```
+
+The CLI currently uses Python because the tool is mostly manifest parsing plus
+invoking `psql`. If Replay Env grows into a long-running daemon, bundled
+browser runner, or single-binary distribution, Go or Rust may become a better
+fit. For the current scope, packaging the Python CLI is the lowest-friction path.
+
 ## Core Idea
 
 Replay Env does not need one Python adapter per app. Each repo gets an app
-manifest under `config/apps/` that declares:
+manifest under `config/apps/` or in the target repository. The manifest declares:
 
 - subject identity keys, such as `tenant_id`, `user_id`, `account_id`, or `workspace_id`
 - graph expansion SQL for related users/accounts/projects
@@ -39,14 +70,14 @@ manifest under `config/apps/` that declares:
 
 The generic engine reads that manifest and performs the export/materialization.
 
-See [docs/app-manifest.md](/Users/charlie/AgentPatternLabs/replay-env/docs/app-manifest.md:1).
+See [docs/app-manifest.md](docs/app-manifest.md).
 
 ## Commands
 
 Export a scoped production subject graph:
 
 ```bash
-bin/replay-env export-postgres \
+replay-env export-postgres \
   --app config/apps/<app>.json \
   --subject tenant_id=<tenant-id> \
   --subject user_id=<user-id> \
@@ -57,13 +88,13 @@ bin/replay-env export-postgres \
 Inspect a capsule:
 
 ```bash
-bin/replay-env inspect capsules/<app>/<capsule>.json
+replay-env inspect capsules/<app>/<capsule>.json
 ```
 
 Materialize into a local replay database:
 
 ```bash
-bin/replay-env materialize-postgres \
+replay-env materialize-postgres \
   --app config/apps/<app>.json \
   --db-url "<local-replay-database-url>" \
   --capsule "capsules/<app>/<capsule>.json"
@@ -72,7 +103,7 @@ bin/replay-env materialize-postgres \
 If the app has a fixed local/dev-auth identity declared in its manifest:
 
 ```bash
-bin/replay-env materialize-postgres \
+replay-env materialize-postgres \
   --app config/apps/<app>.json \
   --db-url "<local-replay-database-url>" \
   --capsule "capsules/<app>/<capsule>.json" \
@@ -82,7 +113,7 @@ bin/replay-env materialize-postgres \
 Print the app-specific playbook generated from the manifest:
 
 ```bash
-bin/replay-env playbook --app config/apps/<app>.json
+replay-env playbook --app config/apps/<app>.json
 ```
 
 The CLI uses `psql` by default. If `psql` is not installed on the host, pass a
@@ -90,21 +121,21 @@ Postgres client command explicitly:
 
 ```bash
 REPLAY_ENV_PSQL_COMMAND="docker run --rm -i postgres:16 psql" \
-bin/replay-env export-postgres ...
+replay-env export-postgres ...
 ```
 
 ## Agent Harness Usage
 
 Replay Env is intentionally callable from Codex or any other coding agent that
-can run shell commands. The stable interface is the CLI:
+can run shell commands. The stable interface is the installed CLI:
 
 ```bash
-bin/replay-env
+replay-env
 ```
 
 The recommended pattern is:
 
-1. Add an app manifest under `config/apps/`.
+1. Add an app manifest under the target repo or pass a manifest path.
 2. Ask the agent to inspect the manifest and target repo.
 3. Export or receive a scoped replay capsule.
 4. Materialize the capsule into the target app's local replay database.
@@ -115,10 +146,10 @@ The recommended pattern is:
 For Codex, use this prompt shape from the target app repo:
 
 ```text
-Use Replay Env at /Users/charlie/AgentPatternLabs/replay-env.
+Use the installed `replay-env` CLI.
 
 Target app manifest:
-/Users/charlie/AgentPatternLabs/replay-env/config/apps/<app>.json
+<path-to-app-manifest>.json
 
 Goal:
 Reproduce and repair the issue using production-shaped replay data before
@@ -138,23 +169,22 @@ Rules:
 Codex can call Replay Env directly:
 
 ```bash
-cd /Users/charlie/AgentPatternLabs/replay-env
-bin/replay-env playbook --app config/apps/<app>.json
-bin/replay-env inspect capsules/<app>/<capsule>.json
-bin/replay-env materialize-postgres \
-  --app config/apps/<app>.json \
+replay-env playbook --app <path-to-app-manifest>.json
+replay-env inspect <path-to-capsule>.json
+replay-env materialize-postgres \
+  --app <path-to-app-manifest>.json \
   --db-url "<local-replay-database-url>" \
-  --capsule "capsules/<app>/<capsule>.json"
+  --capsule "<path-to-capsule>.json"
 ```
 
 If the target app has a fixed local/dev-auth identity, let the agent use the
 manifest's local subject mapping:
 
 ```bash
-bin/replay-env materialize-postgres \
-  --app config/apps/<app>.json \
+replay-env materialize-postgres \
+  --app <path-to-app-manifest>.json \
   --db-url "<local-replay-database-url>" \
-  --capsule "capsules/<app>/<capsule>.json" \
+  --capsule "<path-to-capsule>.json" \
   --use-local-subject
 ```
 
@@ -166,9 +196,9 @@ To make a target repo reuse the same coding plan every time, add a short
 
 When a bug may depend on production-shaped user/account/workspace history:
 
-- Use `/Users/charlie/AgentPatternLabs/replay-env`.
+- Use the installed `replay-env` CLI.
 - Prefer a scoped replay capsule over synthetic fixtures.
-- Use the app manifest in `config/apps/<app>.json`.
+- Use this repo's app manifest.
 - Never export production data without an explicit subject and database URL.
 - Never commit capsules, raw traces, logs, or secrets.
 - Materialize into local/staging replay databases only.
@@ -181,8 +211,7 @@ target repo. Pipe logs or capsule summaries into the prompt when useful:
 
 ```bash
 cd /path/to/target-repo
-/Users/charlie/AgentPatternLabs/replay-env/bin/replay-env inspect \
-  /Users/charlie/AgentPatternLabs/replay-env/capsules/<app>/<capsule>.json \
+replay-env inspect <path-to-capsule>.json \
   | codex exec "Use this Replay Env capsule summary to plan the smallest safe repair. Do not edit yet."
 ```
 

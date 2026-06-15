@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "replay-env"
+version = "0.1.0"
+description = "Generic production-history replay capsules for agentic repair workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "Agent Pattern Labs" }
+]
+keywords = ["replay", "testing", "agents", "codex", "postgres"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Testing"
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Agent-Pattern-Labs/replay-env"
+Repository = "https://github.com/Agent-Pattern-Labs/replay-env"
+Issues = "https://github.com/Agent-Pattern-Labs/replay-env/issues"
+
+[project.scripts]
+replay-env = "replay_env.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["replay_env"]
