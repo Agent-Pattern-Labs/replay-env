@@ -93,6 +93,104 @@ REPLAY_ENV_PSQL_COMMAND="docker run --rm -i postgres:16 psql" \
 bin/replay-env export-postgres ...
 ```
 
+## Agent Harness Usage
+
+Replay Env is intentionally callable from Codex or any other coding agent that
+can run shell commands. The stable interface is the CLI:
+
+```bash
+bin/replay-env
+```
+
+The recommended pattern is:
+
+1. Add an app manifest under `config/apps/`.
+2. Ask the agent to inspect the manifest and target repo.
+3. Export or receive a scoped replay capsule.
+4. Materialize the capsule into the target app's local replay database.
+5. Run the app's normal backend/frontend tests or browser probes.
+6. Use the replay evidence to repair the app.
+7. Store the escaped failure as a regression scenario.
+
+For Codex, use this prompt shape from the target app repo:
+
+```text
+Use Replay Env at /Users/charlie/AgentPatternLabs/replay-env.
+
+Target app manifest:
+/Users/charlie/AgentPatternLabs/replay-env/config/apps/<app>.json
+
+Goal:
+Reproduce and repair the issue using production-shaped replay data before
+promoting the fix to staging.
+
+Rules:
+- Do not read .env files unless I explicitly approve.
+- Do not export production data unless I provide the subject and DB URL.
+- Do not commit replay capsules, logs, or raw production artifacts.
+- Use safe redaction by default.
+- Materialize only into a local or staging-like replay database.
+- After materialization, run the target app's normal tests and browser/API probes.
+- Report the capsule path, row counts, commands run, trace evidence, failures,
+  repair made, and whether the replay gate should block, warn, or continue.
+```
+
+Codex can call Replay Env directly:
+
+```bash
+cd /Users/charlie/AgentPatternLabs/replay-env
+bin/replay-env playbook --app config/apps/<app>.json
+bin/replay-env inspect capsules/<app>/<capsule>.json
+bin/replay-env materialize-postgres \
+  --app config/apps/<app>.json \
+  --db-url "<local-replay-database-url>" \
+  --capsule "capsules/<app>/<capsule>.json"
+```
+
+If the target app has a fixed local/dev-auth identity, let the agent use the
+manifest's local subject mapping:
+
+```bash
+bin/replay-env materialize-postgres \
+  --app config/apps/<app>.json \
+  --db-url "<local-replay-database-url>" \
+  --capsule "capsules/<app>/<capsule>.json" \
+  --use-local-subject
+```
+
+To make a target repo reuse the same coding plan every time, add a short
+`AGENTS.md` section to that repo:
+
+```md
+## Replay Env
+
+When a bug may depend on production-shaped user/account/workspace history:
+
+- Use `/Users/charlie/AgentPatternLabs/replay-env`.
+- Prefer a scoped replay capsule over synthetic fixtures.
+- Use the app manifest in `config/apps/<app>.json`.
+- Never export production data without an explicit subject and database URL.
+- Never commit capsules, raw traces, logs, or secrets.
+- Materialize into local/staging replay databases only.
+- After replay, capture commands, row counts, API responses, screenshots or
+  browser errors, the repair, and the gate decision.
+```
+
+For automation, `codex exec` can run the same plan non-interactively from the
+target repo. Pipe logs or capsule summaries into the prompt when useful:
+
+```bash
+cd /path/to/target-repo
+/Users/charlie/AgentPatternLabs/replay-env/bin/replay-env inspect \
+  /Users/charlie/AgentPatternLabs/replay-env/capsules/<app>/<capsule>.json \
+  | codex exec "Use this Replay Env capsule summary to plan the smallest safe repair. Do not edit yet."
+```
+
+At this stage, Replay Env gives agents a reusable data-replay entrypoint. The
+agent still needs to run the target app's tests/browser checks and make the
+code repair. Replay Env does not yet replace a full E2E harness or release
+gate by itself.
+
 ## Example Manifest
 
 `config/apps/profilescribe.json` is only an example app manifest. It is not a
