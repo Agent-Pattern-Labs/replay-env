@@ -1,0 +1,24 @@
+[package]
+name = "replay-env"
+version = "0.2.0"
+edition = "2021"
+description = "Generic production-history replay capsules for agentic repair workflows."
+license = "MIT"
+repository = "https://github.com/Agent-Pattern-Labs/replay-env"
+homepage = "https://github.com/Agent-Pattern-Labs/replay-env"
+readme = "README.md"
+keywords = ["replay", "testing", "agents", "postgres"]
+categories = ["command-line-utilities", "development-tools::testing"]
+
+[[bin]]
+name = "replay-env"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+sha2 = "0.10"
+shlex = "1.3"

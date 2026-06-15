@@ -2,5 +2,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-exec python3 -m replay_env "$@"
+
+if [ -x "$ROOT/target/release/replay-env" ]; then
+  exec "$ROOT/target/release/replay-env" "$@"
+fi
+
+if [ -x "$ROOT/target/debug/replay-env" ]; then
+  exec "$ROOT/target/debug/replay-env" "$@"
+fi
+
+exec cargo run --quiet --manifest-path "$ROOT/Cargo.toml" -- "$@"

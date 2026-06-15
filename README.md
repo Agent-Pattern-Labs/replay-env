@@ -30,13 +30,13 @@ a golden trace.
 Install directly from GitHub:
 
 ```bash
-pipx install git+https://github.com/Agent-Pattern-Labs/replay-env.git
+cargo install --git https://github.com/Agent-Pattern-Labs/replay-env --tag v0.2.0
 ```
 
 Or install from a local checkout:
 
 ```bash
-pipx install .
+cargo install --path .
 ```
 
 For development from a checkout, this wrapper also works:
@@ -51,14 +51,12 @@ Installed usage assumes the `replay-env` command is on `PATH`:
 replay-env --help
 ```
 
-The CLI currently uses Python because the tool is mostly manifest parsing plus
-invoking `psql`. If Replay Env grows into a long-running daemon, bundled
-browser runner, or single-binary distribution, Go or Rust may become a better
-fit. For the current scope, packaging the Python CLI is the lowest-friction path.
+Replay Env is implemented in Rust so the installed CLI starts quickly, keeps
+runtime dependencies low, and has a clear path to single-binary distribution.
 
 ## Core Idea
 
-Replay Env does not need one Python adapter per app. Each repo gets an app
+Replay Env does not need one app-specific adapter per repo. Each repo gets an app
 manifest under `config/apps/` or in the target repository. The manifest declares:
 
 - subject identity keys, such as `tenant_id`, `user_id`, `account_id`, or `workspace_id`
