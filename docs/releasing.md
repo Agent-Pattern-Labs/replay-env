@@ -29,7 +29,8 @@ git push origin vX.Y.Z
 ```
 
 The `Release` workflow verifies the crate, builds native binaries for Linux,
-macOS, and Windows, and creates or updates the GitHub release for the tag.
+macOS Apple Silicon, and Windows, and creates or updates the GitHub release for
+the tag. Intel macOS users should use `cargo install`.
 
 ## Crates.io
 
